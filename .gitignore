@@ -1,0 +1,15 @@
+# Python environments and temporary files
+.venv/
+__pycache__/
+*.pyc
+
+# Private settings
+.streamlit/secrets.toml
+.env
+
+# Local databases
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqbpro
