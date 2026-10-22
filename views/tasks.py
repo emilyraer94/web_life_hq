@@ -1,30 +1,54 @@
-import streamlit as st
 from datetime import date
+
+import streamlit as st
+from httpx import HTTPError
+from postgrest.exceptions import APIError
+
+from auth import require_login
+from task_data import add_task, load_tasks, save_task
 
 
 st.title("✅ Tasks", anchor=False)
-st.caption("Practice mode — tasks last only for this browser session.")
+st.caption("Your tasks are saved privately in Supabase.")
 
-# Create the task list when this page first opens.
-if "practice_tasks" not in st.session_state:
-    st.session_state["practice_tasks"] = []
+user = require_login()
 
-tasks = st.session_state["practice_tasks"]
+# Load unfinished tasks from the database.
+try:
+    records = load_tasks(user.id)
+except (APIError, HTTPError):
+    st.error("Could not load your tasks. Please refresh to try again.")
+    st.stop()
 
-for task in tasks:
-    task.setdefault("XP", 10)
+# Convert database fields into the labels used on this page.
+tasks = [
+    {
+        "id": record["id"],
+        "Task": record["title"],
+        "Priority": record["priority"],
+        "XP": record["xp"],
+        "Due date": (
+            date.fromisoformat(record["due_date"])
+            if record["due_date"]
+            else None
+        ),
+        "Complete": False,
+    }
+    for record in records
+]
 
-unfinished = sum(not task["Complete"] for task in tasks)
-st.metric("Tasks to do", unfinished)
+st.metric("Tasks to do", len(tasks))
 
+# Add a new task.
 with st.form("add_task", clear_on_submit=True):
-    task_name = st.text_input("Task name")
+    task_name = st.text_input("Task name", max_chars=160)
 
     priority = st.selectbox(
         "Priority",
         ["Low", "Medium", "High"],
         index=1,
     )
+
     xp_reward = st.number_input(
         "XP for completing this task",
         min_value=1,
@@ -32,26 +56,39 @@ with st.form("add_task", clear_on_submit=True):
         value=10,
         step=1,
     )
+
     due_date = st.date_input("Due date (optional)", value=None)
 
     submitted = st.form_submit_button("Add task")
 
 if submitted:
-    if task_name.strip():
-        tasks.append({
-            "Task": task_name.strip(),
-            "Priority": priority,
-            "XP": xp_reward,
-            "Due date": due_date,
-            "Complete": False,
-        })
-        st.rerun()
-    else:
+    if not task_name.strip():
         st.warning("Enter a task name first.")
+    else:
+        try:
+            add_task(
+                owner_id=user.id,
+                task_name=task_name,
+                priority=priority,
+                xp=xp_reward,
+                due_date=due_date,
+            )
+        except APIError:
+            st.error("Supabase could not save this task.")
+        except HTTPError:
+            st.error(
+                "The connection was interrupted. Refresh and check "
+                "your tasks before submitting again."
+            )
+        else:
+            st.rerun()
 
 st.subheader("My tasks", anchor=False)
 
-if tasks:
+if not tasks:
+    st.info("Add your first task using the form above.")
+
+else:
     edit_mode = st.toggle("Edit form", key="edit_tasks")
 
     if edit_mode:
@@ -61,12 +98,19 @@ if tasks:
                 hide_index=True,
                 width="stretch",
                 num_rows="fixed",
+                disabled=["id"],
                 column_config={
+                    "id": None,
+                    "Task": st.column_config.TextColumn(
+                        "Task",
+                        required=True,
+                        max_chars=160,
+                    ),
                     "Priority": st.column_config.SelectboxColumn(
                         "Priority",
                         options=["Low", "Medium", "High"],
                         required=True,
-                    ),            
+                    ),
                     "XP": st.column_config.NumberColumn(
                         "XP",
                         min_value=1,
@@ -87,48 +131,48 @@ if tasks:
             save_changes = st.form_submit_button("Save changes")
 
         if save_changes:
-            missing_name = any(
+            invalid_name = any(
                 not (task["Task"] or "").strip()
+                or len((task["Task"] or "").strip()) > 160
                 for task in edited_tasks
             )
 
-            if missing_name:
-                st.warning("Each task needs a name.")
+            if invalid_name:
+                st.warning("Each task needs a name of 1–160 characters.")
+
             else:
-                #Turn completed tasks into XP history entries.
-                completed_entries = [
-                    {
-                        "Task": task["Task"].strip(),
-                        "XP": int(task["XP"]),
-                        "Completed":date.today(),
-                    }
-                     for task in edited_tasks
-                    if task["Complete"]
-                ]
+                try:
+                    # Save only rows that changed.
+                    for original, edited in zip(tasks, edited_tasks):
+                        if original != edited:
+                            updated_task = {
+                                **edited,
+                                "id": original["id"],
+                            }
+                            save_task(user.id, updated_task)
 
-                # Keep unfinished tasks on this page.
-                remaining_tasks = [
-                    task
-                    for task in edited_tasks
-                    if not task["Complete"]
-                ]
-
-                # Preserve the existing XP history and add new completions.
-                xp_history = st.session_state.get("practice_xp", [])
-
-                st.session_state["practice_xp"] = (
-                    xp_history + completed_entries
-                )
-                st.session_state["practice_tasks"] = remaining_tasks
-
-                st.rerun()
+                except (APIError, HTTPError, ValueError):
+                    st.error(
+                        "Some changes could not be saved. Earlier rows "
+                        "may already be saved. Refresh to check your "
+                        "tasks before editing again."
+                    )
+                else:
+                    st.rerun()
 
     else:
+        # Keep database IDs out of the displayed table.
+        display_tasks = [
+            {
+                key: value
+                for key, value in task.items()
+                if key != "id"
+            }
+            for task in tasks
+        ]
+
         st.dataframe(
-            tasks,
+            display_tasks,
             hide_index=True,
             width="stretch",
         )
-
-else:
-    st.info("Add your first task using the form above.")

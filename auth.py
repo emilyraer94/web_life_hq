@@ -37,6 +37,7 @@ def show_login():
             st.error("Could not connect. Please try again.")
         else:
             if response.session:
+                st.session_state["go_home_after_login"] = True
                 st.rerun()
             else:
                 st.error("Sign-in could not be completed.")
@@ -64,7 +65,7 @@ def require_login():
         st.error("Could not connect. Your login has not been cleared.")
         st.stop()
 
-    if response.user is None:
+    if response is None or response.user is None:
         show_login()
         st.stop()
 

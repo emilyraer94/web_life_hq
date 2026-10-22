@@ -10,7 +10,15 @@ st.set_page_config(
     layout="centered",
 )
 user = require_login()
+if st.sidebar.button("Sign out"):
+    try:
+        get_supabase().auth.sign_out(options={"scope": "local"})
+    except Exception:
+        st.error("Could not sign out. Please try again.")
+        st.stop()
 
+    st.session_state.clear()
+    st.rerun()
 # Check whether this account owns Life HQ.
 try:
     owner_rows = (
@@ -38,6 +46,8 @@ pages = [
 
 # Register the pages and identify the selected page.
 selected_page = st.navigation(pages, position="hidden")
+if st.session_state.pop("go_home_after_login", False):
+    st.switch_page("views/home.py")
 
 # Display our own sidebar links.
 st.sidebar.title("🌿 Life HQ")
