@@ -11,7 +11,7 @@ from adventure_data import (
 )
 
 
-STATUSES = ["Someday", "Planning", "Booked", "Visited"]
+STATUSES = ["Someday", "Planning", "Booked", "Visited", "Maybe", "YES!"]
 
 st.title("🧭 Our Adventures", anchor=False)
 st.caption("Your destinations are saved in your shared Supabase workspace.")
