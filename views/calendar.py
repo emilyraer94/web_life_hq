@@ -9,7 +9,7 @@ from postgrest.exceptions import APIError
 
 from auth import require_login
 from adventure_data import get_shared_workspace_id
-from calendar_data import add_event, load_events
+from calendar_data import add_event, load_events, save_event
 
 
 TZ = ZoneInfo("America/Indiana/Indianapolis")

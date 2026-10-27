@@ -63,29 +63,3 @@ if is_owner:
             "views/xp_tracker.py",
             label="Open XP Tracker",
         )
-
-# Each person can update their own display name.
-with st.expander("Your profile"):
-    with st.form("profile_form"):
-        display_name = st.text_input(
-            "Display name",
-            value=name,
-            max_chars=80,
-        )
-
-        save_profile = st.form_submit_button("Save display name")
-
-    if save_profile:
-        if not display_name.strip():
-            st.warning("Enter a display name.")
-        else:
-            try:
-                get_supabase().auth.update_user({
-                    "data": {
-                        "display_name": display_name.strip(),
-                    }
-                })
-            except (AuthError, HTTPError):
-                st.error("Could not save your name. Please try again.")
-            else:
-                st.rerun()
