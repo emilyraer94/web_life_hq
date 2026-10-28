@@ -7,7 +7,6 @@ from postgrest.exceptions import APIError
 from auth import require_login
 from task_data import add_task, load_tasks, save_task
 
-
 st.title("✅ Tasks", anchor=False)
 st.caption("Your tasks are saved privately in Supabase.")
 
@@ -59,7 +58,7 @@ with st.form("add_task", clear_on_submit=True):
     )
 
     due_date = st.date_input("Due date (optional)", value=None)
-    notes = st.column_config.TextColumn("Notes", max_chars=1000)
+    notes = st.text_area("Notes", max_chars=1000)
     submitted = st.form_submit_button("Add task")
 
 if submitted:
