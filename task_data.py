@@ -13,18 +13,15 @@ def load_tasks(owner_id):
         start = len(records)
 
         response = (
-            supabase.table("xp_tracker")
-            .select("id, title, priority, xp, due_date")
+            supabase.table("tasks")
+            .select("id, task_name, priority, xp, due_date, notes, created_at")
             .eq("owner_id", str(owner_id))
-            .eq("section", "Tasks")
-            .eq("done", False)
             .order("created_at")
-            .order("id")
             .range(start, start + batch_size - 1)
             .execute()
         )
 
-        batch = response.data
+        batch = response.data or []
         records.extend(batch)
 
         if len(batch) < batch_size:
@@ -33,19 +30,18 @@ def load_tasks(owner_id):
     return records
 
 
-def add_task(owner_id, task_name, priority, xp, due_date):
+def add_task(owner_id, task_name, priority, xp, due_date, notes=""):
     """Save a new unfinished task."""
     response = (
         get_supabase()
-        .table("xp_tracker")
+        .table("tasls")
         .insert({
             "owner_id": str(owner_id),
-            "section": "Tasks",
-            "title": task_name.strip(),
+            "task_name": task_name.strip(),
             "priority": priority,
             "xp": int(xp),
-            "due_date": due_date.isoformat() if due_date else None,
-            "done": False,
+            "due_date": (due_date.isoformat() if due_date else None),
+            "notes": notes or "",
         })
         .execute()
     )
@@ -55,35 +51,72 @@ def add_task(owner_id, task_name, priority, xp, due_date):
 
 def save_task(owner_id, task):
     """Update a task, moving it into XP history if completed."""
-    complete = bool(task["Complete"])
+    complete = bool(task.get["Complete", False])
 
-    response = (
-        get_supabase()
-        .table("xp_tracker")
-        .update({
-            "title": task["Task"].strip(),
-            "priority": task["Priority"],
-            "xp": int(task["XP"]),
-            "due_date": (
-                task["Due date"].isoformat()
-                if task["Due date"]
-                else None
-            ),
-            "done": complete,
-            "section": "XP Tracker" if complete else "Tasks",
-            "completed_on": date.today().isoformat() if complete else None,
-        })
-        .eq("id", task["id"])
+    task_id = task["id"]
+
+    updated_values = {
+        "task_name": task["Tasks"].strip(),
+        "priority": task["Priority"],
+        "xp": int(task["XP"]),
+        "due_date": (
+            task ["Due date"].isoformat()
+            if task.get("Due date") else None
+        ),
+        "notes": task.get("Notes") or ""
+
+    }
+        
+    if not complete:
+        response = (
+            supabase.table("tasks")
+            .update(updated_values)
+            .eq("id", task_id)
+            .eq ("owner_id", str(owner_id))
+            .execute()
+        )
+        if not response.data:
+            raise ValueError(
+            "Task not found or not update."
+        )
+    return response.data
+ # Confirm the task still belongs to this user.
+    existing = (
+        supabase.table("tasks")
+        .select("id")
+        .eq("id", task_id)
         .eq("owner_id", str(owner_id))
-        .eq("section", "Tasks")
-        .eq("done", False)
         .execute()
     )
 
-    if not response.data:
-        raise ValueError(
-            "This task could not be updated. Refresh the page "
-            "to load its current state."
-        )
+    if not existing.data:
+        raise ValueError("Task not found or already completed.")
 
-    return response.data
+    # Record the accomplishment in XP history.
+    history = (
+        supabase.table("xp_tracker")
+        .insert({
+            "owner_id": str(owner_id),
+            "section": "XP Tracker",
+            "title": updated_values["task_name"],
+            "priority": updated_values["priority"],
+            "xp": updated_values["xp"],
+            "due_date": updated_values["due_date"],
+            "notes": updated_values["notes"],
+            "done": True,
+            "completed_on": date.today().isoformat(),
+        })
+        .execute()
+    )
+
+    if not history.data:
+        raise ValueError("Could not save XP history.")
+
+    # Remove completed task from active tasks.
+    supabase.table("tasks").delete().eq(
+        "id", task_id
+    ).eq(
+        "owner_id", str(owner_id)
+    ).execute()
+
+    return history.data
