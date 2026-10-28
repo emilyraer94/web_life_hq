@@ -24,14 +24,15 @@ except (APIError, HTTPError):
 tasks = [
     {
         "id": record["id"],
-        "Task": record["title"],
-        "Priority": record["priority"],
-        "XP": record["xp"],
+        "Task": record["task_name"],
+        "Priority": record.get("priority") or "Medium",
+        "XP": record.get("xp") if record.get("xp") is not None else 10,
         "Due date": (
             date.fromisoformat(record["due_date"])
             if record["due_date"]
             else None
         ),
+        "Notes": record.get("notes") or "",
         "Complete": False,
     }
     for record in records
@@ -58,7 +59,7 @@ with st.form("add_task", clear_on_submit=True):
     )
 
     due_date = st.date_input("Due date (optional)", value=None)
-
+    notes = st.column_config.TextColumn("Notes", max_chars=1000)
     submitted = st.form_submit_button("Add task")
 
 if submitted:
@@ -72,6 +73,7 @@ if submitted:
                 priority=priority,
                 xp=xp_reward,
                 due_date=due_date,
+                notes=notes,
             )
         except APIError:
             st.error("Supabase could not save this task.")
@@ -120,6 +122,11 @@ else:
                     ),
                     "Due date": st.column_config.DateColumn(
                         "Due date",
+                    ),
+                    "Notes": st.column_config.TextColumn(
+                                            "Notes",
+                                            required=False,
+                                            max_chars=1000,
                     ),
                     "Complete": st.column_config.CheckboxColumn(
                         "Complete",
